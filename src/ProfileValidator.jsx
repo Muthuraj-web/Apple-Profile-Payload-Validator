@@ -299,7 +299,7 @@ export default function ProfilePayloadValidator() {
     <integer>999</integer>
     <key>PayloadDisplayName</key>
     <string>Broken Sample Profile</string>
-    <key>UnwantedBetaKey</key>
+    <key>UnwantedBetaKey</sol>
     <string>Delete Me Automatically</string>
     <key>PayloadContent</key>
     <array>
@@ -328,7 +328,7 @@ export default function ProfilePayloadValidator() {
           if (node.errorType === 'WRONG_TYPE' || node.errorType === 'MISSING') bgClass = "bg-emerald-950/40 border-emerald-800 text-emerald-200";
 
           return (
-            <div key={index} className={\`p-3 rounded-lg border \${bgClass} transition-all\`}>
+            <div key={index} className={`p-3 rounded-lg border ${bgClass} transition-all`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 
                 <div className="flex items-center space-x-2">
@@ -429,10 +429,10 @@ export default function ProfilePayloadValidator() {
       </header>
 
       {systemMessage.text && (
-        <div className={\`max-w-7xl mx-auto mb-6 p-4 rounded-lg border text-sm flex items-center justify-between \${
+        <div className={`max-w-7xl mx-auto mb-6 p-4 rounded-lg border text-sm flex items-center justify-between ${
           systemMessage.type === 'error' ? 'bg-red-950/40 border-red-800 text-red-200' :
           systemMessage.type === 'success' ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200' : 'bg-blue-950/40 border-blue-800 text-blue-200'
-        }\`}>
+        }`}>
           <span>{systemMessage.text}</span>
           <button onClick={() => setSystemMessage({ type: '', text: '' })} className="font-bold opacity-60 hover:opacity-100">×</button>
         </div>
@@ -442,81 +442,4 @@ export default function ProfilePayloadValidator() {
         
         <div className="lg:col-span-5 flex flex-col space-y-4">
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-sm space-y-3">
-            <h2 className="text-md font-semibold text-slate-200">1. Raw XML Payload Provision</h2>
-            
-            <div className="flex gap-2">
-              <label className="flex-1 cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium py-2 px-3 rounded-lg border border-slate-700 text-center transition">
-                📁 Upload .mobileconfig / .xml
-                <input type="file" accept=".xml,.mobileconfig" onChange={handleFileUpload} className="hidden" />
-              </label>
-              <button 
-                onClick={loadSampleData} 
-                className="bg-slate-800/50 hover:bg-slate-800 text-slate-300 text-xs font-medium py-2 px-3 rounded-lg border border-slate-700 transition"
-              >
-                🧪 Load Faulty Sample
-              </button>
-            </div>
-
-            <textarea
-              className="w-full h-96 bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono text-slate-300 focus:outline-none focus:border-blue-500 resize-y"
-              placeholder="Paste Apple Configuration Profile Payload string here..."
-              value={xmlInput}
-              onChange={(e) => setXmlInput(e.target.value)}
-            />
-
-            <button
-              onClick={handleValidate}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 px-4 rounded-lg shadow text-sm tracking-wide transition"
-            >
-              🔍 Validate Profile Against Spec
-            </button>
-          </div>
-        </div>
-
-        <div className="lg:col-span-7">
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-sm min-h-[540px] flex flex-col">
-            <div className="flex flex-wrap items-center justify-between border-b border-slate-800 pb-3 mb-4 gap-2">
-              <h2 className="text-md font-semibold text-slate-200 flex items-center gap-2">
-                🌲 Interactive Schema DOM Fixer Tree
-              </h2>
-              {validationRun && treeData && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={removeUnexpectedKeys}
-                    className="bg-red-900/60 hover:bg-red-800 text-red-200 text-xs font-medium py-1.5 px-3 rounded-md border border-red-700 transition"
-                  >
-                    🧹 Purge All Unexpected
-                  </button>
-                  <button
-                    onClick={handleExport}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-1.5 px-3 rounded-md shadow transition"
-                  >
-                    💾 Export Compliant XML
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 overflow-y-auto max-h-[580px] pr-2">
-              {!validationRun ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500">
-                  <span className="text-4xl mb-2">🚦</span>
-                  <p className="text-sm">Provide an XML configuration layout on the left panel and prompt validation execution to populate target remediation logs.</p>
-                </div>
-              ) : treeData && treeData.length > 0 ? (
-                <div className="space-y-1">
-                  <span className="text-slate-500 text-xs font-mono">&lt;plist version="1.0"&gt;</span>
-                  {renderInteractiveDOMTree(treeData)}
-                  <span className="text-slate-500 text-xs font-mono block mt-1">&lt;/plist&gt;</span>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No structured keys detected.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-      </main>
-    </div>
-  );
-}
+            <h2 className="text-md font-semibold text-slate-200
