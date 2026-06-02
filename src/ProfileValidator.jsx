@@ -36,50 +36,39 @@ const validateAgainstAppleDTD = (xmlDoc) => {
   const allowedTags = ['plist', 'dict', 'array', 'key', 'string', 'data', 'date', 'integer', 'real', 'true', 'false'];
   const errors = [];
 
-  // 1. Verify Root element is exactly <plist>
   const rootElement = xmlDoc.documentElement;
   if (!rootElement || rootElement.tagName.toLowerCase() !== 'plist') {
     errors.push("DTD Violation: Root element must be exactly <plist>.");
     return errors;
   }
 
-  // 2. Recursively crawl the DOM tree to assert standard Plist element tags and Interleaving
   const crawlAndAssert = (element) => {
     const children = Array.from(element.children);
     const tagName = element.tagName.toLowerCase();
 
-    // Check if the current tag belongs to Apple's DTD specification
     if (!allowedTags.includes(tagName)) {
       errors.push(`DTD Violation: Unrecognized Apple Plist element tag '<${element.tagName}>' detected.`);
     }
 
-    // Strict Key-Value alternating alignment check inside <dict> blocks
     if (tagName === 'dict') {
       for (let i = 0; i < children.length; i++) {
         const currentChildTag = children[i].tagName.toLowerCase();
-        
         if (i % 2 === 0) {
-          // Even positions MUST be a <key>
           if (currentChildTag !== 'key') {
             errors.push(`DTD Violation: Expected a '<key>' tag inside <dict>, but found '<${children[i].tagName}>'.`);
             break; 
           }
         } else {
-          // Odd positions MUST NOT be a <key> (must be a value type)
           if (currentChildTag === 'key') {
             errors.push(`DTD Violation: Duplicate consecutive '<key>' elements found without an associated type value block.`);
             break;
           }
         }
       }
-      
-      // Dict must have pairs (even number of child elements)
       if (children.length % 2 !== 0 && children[children.length - 1]?.tagName.toLowerCase() === 'key') {
         errors.push(`DTD Violation: The final '<key>' tag inside <dict> is missing an assigned value type block entirely.`);
       }
     }
-
-    // Continue crawling deep down the DOM tree
     children.forEach(child => crawlAndAssert(child));
   };
 
@@ -94,16 +83,13 @@ const parsePlistXmlToTree = (xmlString, onDtdCheck) => {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
   
-  // Basic XML Structural Syntax checks
   const parseError = xmlDoc.getElementsByTagName("parsererror");
   if (parseError.length > 0) {
     throw new Error(`XML Well-Formed Error: ${parseError[0].textContent}`);
   }
 
-  // Run Phase 1: Apple DTD Strict Validations
   const dtdErrors = validateAgainstAppleDTD(xmlDoc);
   if (dtdErrors.length > 0) {
-    // Notify tracking state via callback and halt execution pipeline
     onDtdCheck(dtdErrors);
     throw new Error("Found critical Apple Plist DTD structural violations. Resolve syntax errors first.");
   }
@@ -192,7 +178,7 @@ const convertTreeToPlist = (treeData) => {
 // ==========================================
 // 4. PHASE 2: TOP-LEVEL PROFILE SPEC VALIDATOR
 // ==========================================
-const validateTree = (tree, schema) => {
+const validateTree = (tree, schema, isInsidePayloadContentItem = false) => {
   let updatedTree = [...tree];
   const foundKeys = updatedTree.map(item => item.key);
 
@@ -200,6 +186,10 @@ const validateTree = (tree, schema) => {
     const rules = schema[node.key];
     
     if (!rules) {
+      // FIX: If we are checking fields inside a PayloadContent inner item, allow unknown fields as custom configuration profiles!
+      if (isInsidePayloadContentItem) {
+        return { ...node, errorType: 'PAYLOAD_SPECIFIC', errorMessage: null };
+      }
       return { ...node, errorType: 'UNEXPECTED', errorMessage: 'Unexpected profile payload key.' };
     }
     
@@ -213,13 +203,14 @@ const validateTree = (tree, schema) => {
     }
 
     if (node.type === 'dict' && Array.isArray(node.value)) {
-      return { ...node, value: validateTree(node.value, {}), errorType: null };
+      return { ...node, value: validateTree(node.value, {}, isInsidePayloadContentItem), errorType: null };
     }
 
     if (rules.isPayloadContentArray && node.type === 'array') {
       const validatedArray = node.value.map(arrayItem => {
         if (arrayItem.type === 'dict') {
-          return { ...arrayItem, value: validateTree(arrayItem.value, COMMON_PAYLOAD_KEYS) };
+          // Setting the context true so inner properties bypass the strict whitelist block
+          return { ...arrayItem, value: validateTree(arrayItem.value, COMMON_PAYLOAD_KEYS, true) };
         }
         return arrayItem;
       });
@@ -229,6 +220,7 @@ const validateTree = (tree, schema) => {
     return { ...node, errorType: null };
   });
 
+  // Inject missing essential parameters if missing
   Object.keys(schema).forEach(requiredKey => {
     if (schema[requiredKey].required && !foundKeys.includes(requiredKey)) {
       const targetType = schema[requiredKey].type;
@@ -286,11 +278,8 @@ export default function ProfilePayloadValidator() {
         return;
       }
 
-      // Execute parsing + Phase 1 DTD validations
       const initialTree = parsePlistXmlToTree(xmlInput, (errors) => setDtdErrors(errors));
-      
-      // Execute Phase 2 TopLevel validations
-      const validatedTree = validateTree(initialTree, TOP_LEVEL_SCHEMA);
+      const validatedTree = validateTree(initialTree, TOP_LEVEL_SCHEMA, false);
       setTreeData(validatedTree);
       setValidationRun(true);
       setSystemMessage({ type: 'success', text: 'All stages passed! Profile matches valid structural definitions.' });
@@ -314,9 +303,8 @@ export default function ProfilePayloadValidator() {
           return n;
         });
     };
-    const cleaned = cleanNodes(treeData);
-    setTreeData(cleaned);
-    setSystemMessage({ type: 'success', text: 'All unexpected profile keys purged!' });
+    setTreeData(cleanNodes(treeData));
+    setSystemMessage({ type: 'success', text: 'All unexpected top-level profile keys purged!' });
   };
 
   const updateNodeValue = (path, newValue, fixedType = null) => {
@@ -346,7 +334,6 @@ export default function ProfilePayloadValidator() {
         return node;
       });
     };
-
     setTreeData(updateRecursive(treeData, []));
   };
 
@@ -372,10 +359,11 @@ export default function ProfilePayloadValidator() {
 <dict>
     <key>PayloadDisplayName</key>
     <string>DTD Broken Profile</string>
-    
     <key>InvalidTagUsed</key>
-    <customtext>This tag breaks Apple DTD</customtext> <key>MissingValueKey</key>
-    <key>NextKeyImmediately</key> <string>Test</string>
+    <customtext>This tag breaks Apple DTD</customtext>
+    <key>MissingValueKey</key>
+    <key>NextKeyImmediately</key>
+    <string>Test</string>
 </dict>
 </plist>`);
     setTreeData(null);
@@ -391,8 +379,19 @@ export default function ProfilePayloadValidator() {
           const nodePath = [...currentPath, index];
           
           let bgClass = "bg-slate-800/40 border-slate-700";
-          if (node.errorType === 'UNEXPECTED') bgClass = "bg-red-950/40 border-red-800 text-red-200 animate-pulse";
-          if (node.errorType === 'WRONG_TYPE' || node.errorType === 'MISSING') bgClass = "bg-emerald-950/40 border-emerald-800 text-emerald-200";
+          let badgeText = node.errorType;
+          let badgeColor = "bg-amber-500 text-slate-900";
+
+          // Styling configurations for the separate states
+          if (node.errorType === 'UNEXPECTED') {
+            bgClass = "bg-red-950/40 border-red-800 text-red-200 animate-pulse";
+          } else if (node.errorType === 'WRONG_TYPE' || node.errorType === 'MISSING') {
+            bgClass = "bg-emerald-950/40 border-emerald-800 text-emerald-200";
+          } else if (node.errorType === 'PAYLOAD_SPECIFIC') {
+            bgClass = "bg-slate-900/90 border-slate-700/60 text-slate-300";
+            badgeText = "Payload Specific";
+            badgeColor = "bg-blue-600/80 text-blue-100 border border-blue-500/30";
+          }
 
           return (
             <div key={index} className={`p-3 rounded-lg border ${bgClass} transition-all`}>
@@ -400,8 +399,10 @@ export default function ProfilePayloadValidator() {
                 <div className="flex items-center space-x-2">
                   <span className="text-amber-400 font-semibold">&lt;key&gt;{node.key}&lt;/key&gt;</span>
                   <span className="text-xs bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">Type: {node.type}</span>
-                  {node.errorType && (
-                    <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500 text-slate-900">{node.errorType}</span>
+                  {badgeText && (
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${badgeColor}`}>
+                      {badgeText}
+                    </span>
                   )}
                 </div>
                 {node.errorType === 'WRONG_TYPE' && (
@@ -524,7 +525,6 @@ export default function ProfilePayloadValidator() {
             </div>
 
             <div className="flex-1 overflow-y-auto max-h-[580px] pr-2">
-              {/* Surfacing DTD Phase 1 Errors Instantly */}
               {dtdErrors.length > 0 && (
                 <div className="p-4 rounded-lg bg-red-950/50 border border-red-800/80 space-y-2 mb-4 font-mono text-xs">
                   <h3 className="text-red-400 font-bold uppercase tracking-wider flex items-center gap-1">❌ Phase 1: Apple DTD Validation Failed</h3>
